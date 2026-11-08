@@ -90,22 +90,11 @@
 		<servlet-name>CartServlet</servlet-name>
 		<url-pattern>/cart</url-pattern>
 	</servlet-mapping>
-	<servlet>
-		<servlet-name>BuyBooksServlet</servlet-name>
-		<servlet-class>servlets.BuyBooksServlet</servlet-class>
-	</servlet>
-	<servlet-mapping>
-		<servlet-name>BuyBooksServlet</servlet-name>
-		<url-pattern>/buybook</url-pattern>
-	</servlet-mapping>
-	<servlet>
-		<servlet-name>ReceiptServlet</servlet-name>
-		<servlet-class>servlets.ReceiptServlet</servlet-class>
-	</servlet>
-	<servlet-mapping>
-		<servlet-name>ReceiptServlet</servlet-name>
-		<url-pattern>/buys</url-pattern>
-	</servlet-mapping>
+
+	<!-- ALTERAÇÃO: Remoção do blocos <servlet> + <servlet-mapping> de BuyBooksServlet -->
+
+	<!-- ALTERAÇÃO: Remoção do blocos <servlet> + <servlet-mapping> de ReceiptServlet -->
+	
 	<servlet>
 		<servlet-name>CheckoutServlet</servlet-name>
 		<servlet-class>servlets.CheckoutServlet</servlet-class>

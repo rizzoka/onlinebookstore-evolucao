@@ -79,4 +79,9 @@ public class StoreUtil {
         }
 
     }
+
+    public static int getCartItemQuantity(HttpSession session, String bCode) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getCartItemQuantity'");
+    }
 }

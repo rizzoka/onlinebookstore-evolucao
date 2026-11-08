@@ -80,12 +80,7 @@ public class ViewBookServlet extends HttpServlet {
         int bQty = book.getQuantity();
 
         // Quantity of the current book added to the cart
-        int cartItemQty = 0;
-        if (session.getAttribute("qty_" + bCode) != null) {
-            // Quantity of each book in the cart will be added in the session prefixed with
-            // 'qty_' following with bookId
-            cartItemQty = (int) session.getAttribute("qty_" + bCode);
-        }
+        int cartItemQty = StoreUtil.getCartItemQuantity(session, bCode);
 
         // Button To Add/Remove item from the cart
         String button = "";
