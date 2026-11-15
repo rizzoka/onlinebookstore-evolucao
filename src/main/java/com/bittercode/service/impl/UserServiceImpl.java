@@ -18,6 +18,7 @@ import com.bittercode.util.UserValidator;
 
 public class UserServiceImpl implements UserService {
 
+    // constantes para identificar o tipo de usuário no banco de dados para que possamos diferenciar entre vendedores e clientes
     private static final int SELLER_ROLE_ID = 1;
     private static final int CUSTOMER_ROLE_ID = 2;
 
@@ -34,12 +35,13 @@ public class UserServiceImpl implements UserService {
         return DBUtil.getConnection();
     }
 
+    // método para fazer login do usuário verificando as credenciais no banco de dados e armazenando o email na sessão (mais polido)
     @Override
     public User login(UserRole role, String email, String password, HttpSession session) throws StoreException {
         UserValidator.validateLoginCredentials(email, password);
         Connection con = getConnection();
 
-
+        //fechando o preparedStatement e resultSet automaticamente para evitar vazamento de recursos
         try (PreparedStatement ps = con.prepareStatement(LOGIN_QUERY)){
             ps.setString(1, email.trim());
             ps.setString(2, password);
@@ -60,6 +62,7 @@ public class UserServiceImpl implements UserService {
         return null;
     }
 
+    // método para verificar se o usuário está logado com base na sessão e no papel do usuário
     @Override
     public boolean isLoggedIn(UserRole role, HttpSession session) {
         if (role == null){
@@ -68,6 +71,7 @@ public class UserServiceImpl implements UserService {
         return session != null && session.getAttribute(role.toString()) != null;
     }
 
+    // método para fazer logout do usuário removendo os atributos da sessão e invalidando a sessão
     @Override
     public boolean logout(HttpSession session) {
         if (session != null){
@@ -78,6 +82,7 @@ public class UserServiceImpl implements UserService {
         return true;
     }
 
+    // método para registrar um novo usuário no banco de dados após validar os dados do usuário
     @Override
     public String register(UserRole role, User user) throws StoreException {
         UserValidator.validateRegistration(user);
@@ -101,6 +106,7 @@ public class UserServiceImpl implements UserService {
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("duplicate")){
                 return "Usuário já registrado com esse email!!";
             } 
+            // lançando uma exceção personalizada para encapsular a mensagem de erro do banco de dados (UX)
             throw new StoreException("Erro ao registrar usuário." + e.getMessage());
         }
         return ResponseCode.FAILURE.name();
@@ -110,6 +116,7 @@ public class UserServiceImpl implements UserService {
         return UserRole.SELLER.equals(role) ? SELLER_ROLE_ID : CUSTOMER_ROLE_ID;
     }
 
+    // método para mapear o ResultSet do banco de dados para um objeto User
         private User mapResultSetToUser(ResultSet rs, String email) throws SQLException {
         User user = new User();
         user.setFirstName(rs.getString(UsersDBConstants.COLUMN_FIRSTNAME));
