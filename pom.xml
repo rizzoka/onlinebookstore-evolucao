@@ -71,5 +71,19 @@
 			<artifactId>javax.servlet-api</artifactId>
 			<version>3.1.0</version>
 		</dependency>
+
+		        <!-- JUnit 5 para Testes Unitários -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+        </dependency>
+
+        <!-- Mockito para simular o Banco de Dados (Mocks) -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.11.0</version>
+        </dependency>
 	</dependencies>
 </project>
