@@ -71,5 +71,13 @@
 			<artifactId>javax.servlet-api</artifactId>
 			<version>3.1.0</version>
 		</dependency>
+
+
+		<!-- JSTL: tags <c:out>/<c:forEach> usadas nas JSPs (o Tomcat nao traz a JSTL) -->
+		<dependency>
+			<groupId>javax.servlet</groupId>
+			<artifactId>jstl</artifactId>
+			<version>1.2</version>
+		</dependency>
 	</dependencies>
 </project>
