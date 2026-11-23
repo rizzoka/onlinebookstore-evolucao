@@ -20,6 +20,9 @@ public final class Views {
 	/** Página de erro (usada por {@code ErrorHandlerServlet}). */
 	public static final String ERROR = ROOT + "error.jsp";
 
+	/** Aviso "faça login para continuar", para visitantes não logados. */
+	public static final String LOGIN_REQUIRED = ROOT + "login-required.jsp";
+
 	private Views() {
 		// classe utilitária: não deve ser instanciada
 	}
