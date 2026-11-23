@@ -1,97 +1,104 @@
 package servlets;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import com.bittercode.constant.ResponseCode;
+import com.bittercode.constant.Views;
 import com.bittercode.model.StoreException;
 import com.bittercode.model.UserRole;
 import com.bittercode.util.StoreUtil;
 
+/**
+ * Trata todos os erros da aplicacao (/error).
+ *
+ * <p>O web.xml encaminha para ca os erros 404 e 405 e qualquer excecao nao
+ * tratada. O servlet apenas coordena: descobre o codigo e a mensagem do erro,
+ * registra no log, escolhe o menu e encaminha para a JSP. Todo o HTML fica em
+ * {@code error.jsp}.</p>
+ *
+ * <p>Sobrescreve {@code service()} (e nao {@code doGet()}) de proposito: o
+ * container encaminha o erro com o mesmo metodo HTTP da requisicao original
+ * (GET, POST...). Com {@code doGet()}, um erro em um POST geraria um novo
+ * erro 405 dentro da propria pagina de erro.</p>
+ */
 public class ErrorHandlerServlet extends HttpServlet {
 
-    public void service(HttpServletRequest req, HttpServletResponse res) throws IOException, ServletException {
-        PrintWriter pw = res.getWriter();
-        res.setContentType("text/html");
+    private static final Logger LOGGER = Logger.getLogger(ErrorHandlerServlet.class.getName());
 
-        // Fetch the exceptions
-        Throwable throwable = (Throwable) req.getAttribute("javax.servlet.error.exception");
-        Integer statusCode = (Integer) req.getAttribute("javax.servlet.error.status_code");
-        String servletName = (String) req.getAttribute("javax.servlet.error.servlet_name");
-        String requestUri = (String) req.getAttribute("javax.servlet.error.request_uri");
-        String errorMessage = ResponseCode.INTERNAL_SERVER_ERROR.getMessage();
+    @Override
+    protected void service(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+        // Dados que o container coloca na requisicao ao encaminhar um erro
+        Throwable throwable = (Throwable) req.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+        Integer statusAttr = (Integer) req.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
+        String servletName = (String) req.getAttribute(RequestDispatcher.ERROR_SERVLET_NAME);
+        String requestUri = (String) req.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);
+
+        int statusCode = (statusAttr == null) ? 0 : statusAttr;
         String errorCode = ResponseCode.INTERNAL_SERVER_ERROR.name();
+        String errorMessage = ResponseCode.INTERNAL_SERVER_ERROR.getMessage();
 
-        if (statusCode == null)
-            statusCode = 0;
-        Optional<ResponseCode> errorCodes = ResponseCode.getMessageByStatusCode(statusCode);
-        if (errorCodes.isPresent()) {
-            errorMessage = errorCodes.get().getMessage();
-            errorCode = errorCodes.get().name();
+        Optional<ResponseCode> responseCode = ResponseCode.getMessageByStatusCode(statusCode);
+        if (responseCode.isPresent()) {
+            errorCode = responseCode.get().name();
+            errorMessage = responseCode.get().getMessage();
         }
 
-        if (throwable != null && throwable instanceof StoreException) {
+        // Erros da propria loja trazem codigo e mensagem mais especificos
+        if (throwable instanceof StoreException) {
             StoreException storeException = (StoreException) throwable;
-            if (storeException != null) {
-                errorMessage = storeException.getMessage();
-                statusCode = storeException.getStatusCode();
-                errorCode = storeException.getErrorCode();
-                storeException.printStackTrace();
-            }
+            statusCode = storeException.getStatusCode();
+            errorCode = storeException.getErrorCode();
+            errorMessage = storeException.getMessage();
         }
 
-        System.out.println("======ERROR TRIGGERED========");
-        System.out.println("Servlet Name: " + servletName);
-        System.out.println("Request URI: " + requestUri);
-        System.out.println("Status Code: " + statusCode);
-        System.out.println("Error Code: " + errorCode);
-        System.out.println("Error Message: " + errorMessage);
-        System.out.println("=============================");
+        logError(statusCode, errorCode, errorMessage, servletName, requestUri, throwable);
 
-        if (StoreUtil.isLoggedIn(UserRole.CUSTOMER, req.getSession())) {
-            RequestDispatcher rd = req.getRequestDispatcher("CustomerHome.html");
+        req.setAttribute("errorCode", errorCode);
+        req.setAttribute("errorMessage", errorMessage);
+        defineMenu(req);
+
+        RequestDispatcher rd = req.getRequestDispatcher(Views.ERROR);
+        if (res.isCommitted()) {
+            // Parte da pagina ja foi enviada ao navegador: nao da para trocar
+            // a resposta (forward), so acrescentar o erro no fim (include)
             rd.include(req, res);
-            StoreUtil.setActiveTab(pw, "home");
-            showErrorMessage(pw, errorCode, errorMessage);
-
-        } else if (StoreUtil.isLoggedIn(UserRole.SELLER, req.getSession())) {
-            RequestDispatcher rd = req.getRequestDispatcher("SellerHome.html");
-            rd.include(req, res);
-            StoreUtil.setActiveTab(pw, "home");
-            showErrorMessage(pw, errorCode, errorMessage);
-
         } else {
-            RequestDispatcher rd = req.getRequestDispatcher("index.html");
-            rd.include(req, res);
-            pw.println("<script>"
-                    + "document.getElementById('topmid').innerHTML='';"
-                    + "document.getElementById('happy').innerHTML='';"
-                    + "</script>");
-            showErrorMessage(pw, errorCode, errorMessage);
+            rd.forward(req, res);
         }
-
     }
 
-    private void showErrorMessage(PrintWriter pw, String errorCode, String errorMessage) {
-        pw.println("<div class='container my-5'>"
-                + "<div class=\"alert alert-success\" role=\"alert\" style='max-width:450px; text-align:center; margin:auto;'>\r\n"
-                + "  <h4 class=\"alert-heading\">"
-                + errorCode
-                + "</h4>\r\n"
-                + "  <hr>\r\n"
-                + "  <p class=\"mb-0\">"
-                + errorMessage
-                + "</p>\r\n"
-                + "</div>"
-                + "</div>");
-
+    /** Escolhe o menu de acordo com quem esta logado; a aba Home fica ativa. */
+    private void defineMenu(HttpServletRequest req) {
+        HttpSession session = req.getSession();
+        if (StoreUtil.isLoggedIn(UserRole.CUSTOMER, session)) {
+            req.setAttribute("navType", "customer");
+        } else if (StoreUtil.isLoggedIn(UserRole.SELLER, session)) {
+            req.setAttribute("navType", "seller");
+        } else {
+            req.setAttribute("navType", "public");
+        }
+        req.setAttribute("activeTab", "home");
     }
 
+    /** Registra o erro no log do servidor (com stack trace quando houver excecao). */
+    private void logError(int statusCode, String errorCode, String errorMessage,
+            String servletName, String requestUri, Throwable throwable) {
+        String message = String.format("Erro %d (%s) em %s [servlet: %s]: %s",
+                statusCode, errorCode, requestUri, servletName, errorMessage);
+        if (throwable != null) {
+            LOGGER.log(Level.SEVERE, message, throwable);
+        } else {
+            LOGGER.warning(message);
+        }
+    }
 }
