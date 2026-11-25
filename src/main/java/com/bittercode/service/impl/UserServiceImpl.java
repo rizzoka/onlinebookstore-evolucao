@@ -14,85 +14,116 @@ import com.bittercode.model.User;
 import com.bittercode.model.UserRole;
 import com.bittercode.service.UserService;
 import com.bittercode.util.DBUtil;
+import com.bittercode.util.UserValidator;
 
 public class UserServiceImpl implements UserService {
 
-    private static final String registerUserQuery = "INSERT INTO " + UsersDBConstants.TABLE_USERS
+    // constantes para identificar o tipo de usuário no banco de dados para que possamos diferenciar entre vendedores e clientes
+    private static final int SELLER_ROLE_ID = 1;
+    private static final int CUSTOMER_ROLE_ID = 2;
+
+    private static final String REGISTER_QUERY = "INSERT INTO " + UsersDBConstants.TABLE_USERS
             + "  VALUES(?,?,?,?,?,?,?,?)";
 
-    private static final String loginUserQuery = "SELECT * FROM " + UsersDBConstants.TABLE_USERS + " WHERE "
-            + UsersDBConstants.COLUMN_USERNAME + "=? AND " + UsersDBConstants.COLUMN_PASSWORD + "=? AND "
+    private static final String LOGIN_QUERY = "SELECT * FROM " + UsersDBConstants.TABLE_USERS + " WHERE "
+            + UsersDBConstants.COLUMN_USERNAME + "=? AND "
+            + UsersDBConstants.COLUMN_PASSWORD + "=? AND "
             + UsersDBConstants.COLUMN_USERTYPE + "=?";
+
+    // essa conecction permite testes unitários com mockito sem depender totalmente do MySQL
+    protected Connection getConnection() throws StoreException {
+        return DBUtil.getConnection();
+    }
+
 
     @Override
     public User login(UserRole role, String email, String password, HttpSession session) throws StoreException {
-        Connection con = DBUtil.getConnection();
-        PreparedStatement ps;
-        User user = null;
-        try {
-            String userType = UserRole.SELLER.equals(role) ? "1" : "2";
-            ps = con.prepareStatement(loginUserQuery);
-            ps.setString(1, email);
+        UserValidator.validateLoginCredentials(email, password);
+        Connection con = getConnection();
+
+        //fechando o preparedStatement e resultSet automaticamente para evitar vazamento de recursos
+        try (PreparedStatement ps = con.prepareStatement(LOGIN_QUERY)){
+            ps.setString(1, email.trim());
             ps.setString(2, password);
-            ps.setString(3, userType);
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                user = new User();
-                user.setFirstName(rs.getString("firstName"));
-                user.setLastName(rs.getString("lastName"));
-                user.setPhone(rs.getLong("phone"));
-                user.setEmailId(email);
-                user.setPassword(password);
-                session.setAttribute(role.toString(), user.getEmailId());
+            ps.setInt(3, resolveUserType(role));
+
+            try (ResultSet rs = ps.executeQuery()){
+                if(rs.next()){
+                    User user = mapResultSetToUser(rs, email.trim());
+                    if (session != null) {
+                        session.setAttribute(role.toString(), user.getEmailId());
+                    }
+                    return user;
+                }
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new StoreException("Erro ao fazer login: " + e.getMessage());
         }
-        return user;
+        return null;
     }
+
 
     @Override
     public boolean isLoggedIn(UserRole role, HttpSession session) {
-        if (role == null)
+        if (role == null){
             role = UserRole.CUSTOMER;
-        return session.getAttribute(role.toString()) != null;
+        }
+        return session != null && session.getAttribute(role.toString()) != null;
     }
+
 
     @Override
     public boolean logout(HttpSession session) {
-        session.removeAttribute(UserRole.CUSTOMER.toString());
-        session.removeAttribute(UserRole.SELLER.toString());
-        session.invalidate();
+        if (session != null){
+            session.removeAttribute(UserRole.CUSTOMER.toString());
+            session.removeAttribute(UserRole.SELLER.toString());
+            session.invalidate();
+        }
         return true;
     }
 
+
     @Override
     public String register(UserRole role, User user) throws StoreException {
-        String responseMessage = ResponseCode.FAILURE.name();
-        Connection con = DBUtil.getConnection();
+        UserValidator.validateRegistration(user);
+        Connection con = getConnection();
         try {
-            PreparedStatement ps = con.prepareStatement(registerUserQuery);
-            ps.setString(1, user.getEmailId());
+            PreparedStatement ps = con.prepareStatement(REGISTER_QUERY);
+            ps.setString(1, user.getEmailId().trim());
             ps.setString(2, user.getPassword());
-            ps.setString(3, user.getFirstName());
-            ps.setString(4, user.getLastName());
-            ps.setString(5, user.getAddress());
+            ps.setString(3, user.getFirstName().trim());
+            ps.setString(4, user.getLastName() != null ? user.getLastName().trim() : "");
+            ps.setString(5, user.getAddress() != null ? user.getAddress().trim() : "");
             ps.setLong(6, user.getPhone());
-            ps.setString(7, user.getEmailId());
-            int userType = UserRole.SELLER.equals(role) ? 1 : 2;
-            ps.setInt(8, userType);
-            int k = ps.executeUpdate();
-            if (k == 1) {
-                responseMessage = ResponseCode.SUCCESS.name();
-                ;
+            ps.setString(7, user.getEmailId().trim());
+            ps.setInt(8, resolveUserType(role));
+
+            int responseCode = ps.executeUpdate();
+            if (responseCode == 1) {
+                return ResponseCode.SUCCESS.name();
             }
-        } catch (Exception e) {
-            responseMessage += " : " + e.getMessage();
-            if (responseMessage.contains("Duplicate"))
-                responseMessage = "User already registered with this email !!";
-            e.printStackTrace();
+        } catch (SQLException e) {
+            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("duplicate")){
+                return "Usuário já registrado com esse email!!";
+            }
+
+            throw new StoreException("Erro ao registrar usuário." + e.getMessage());
         }
-        return responseMessage;
+        return ResponseCode.FAILURE.name();
     }
 
+    private int resolveUserType(UserRole role) {
+        return UserRole.SELLER.equals(role) ? SELLER_ROLE_ID : CUSTOMER_ROLE_ID;
+    }
+
+
+    private User mapResultSetToUser(ResultSet rs, String email) throws SQLException {
+        User user = new User();
+        user.setFirstName(rs.getString(UsersDBConstants.COLUMN_FIRSTNAME));
+        user.setLastName(rs.getString(UsersDBConstants.COLUMN_LASTNAME));
+        user.setPhone(rs.getLong(UsersDBConstants.COLUMN_PHONE));
+        user.setEmailId(email);
+        user.setAddress(rs.getString(UsersDBConstants.COLUMN_ADDRESS));
+        return user;
+    }
 }

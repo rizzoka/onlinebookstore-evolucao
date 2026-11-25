@@ -18,7 +18,7 @@ public final class DBUtil {
     }
 
     private DBUtil() {
-        // Impede instanciação de classe utilitária
+
     }
 
     public static Connection getConnection() throws StoreException {
