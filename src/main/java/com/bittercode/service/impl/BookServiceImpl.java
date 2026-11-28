@@ -1,11 +1,11 @@
 package com.bittercode.service.impl;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.bittercode.constant.ResponseCode;
 import com.bittercode.constant.db.BooksDBConstants;
@@ -40,18 +40,20 @@ public class BookServiceImpl implements BookService {
     @Override
     public Book getBookById(String bookId) throws StoreException {
         Book book = null;
-        Connection con = DBUtil.getConnection();
-        try {
-            PreparedStatement ps = con.prepareStatement(getBookByIdQuery);
-            ps.setString(1, bookId);
-            ResultSet rs = ps.executeQuery();
 
-            if (rs.next()) {
-                book = mapResultSetToBook(rs);
+        try (Connection con = DBUtil.getConnection();
+            PreparedStatement ps = con.prepareStatement(getBookByIdQuery)) {
+
+            ps.setString(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    book = mapResultSetToBook(rs);
+                }
             }
 
         } catch (SQLException e) {
-
+            throw new StoreException(ResponseCode.INTERNAL_SERVER_ERROR.name(),
+                    "Erro ao buscar livro por ID: " + e.getMessage());
         }
         return book;
     }
@@ -59,18 +61,18 @@ public class BookServiceImpl implements BookService {
     @Override
     public List<Book> getAllBooks() throws StoreException {
         List<Book> books = new ArrayList<Book>();
-        Connection con = DBUtil.getConnection();
 
-        try {
-            PreparedStatement ps = con.prepareStatement(getAllBooksQuery);
-            ResultSet rs = ps.executeQuery();
+        try (Connection con = DBUtil.getConnection();
+             PreparedStatement ps = con.prepareStatement(getAllBooksQuery);
+             ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
                 books.add(mapResultSetToBook(rs));
             }
 
         } catch (SQLException e) {
-
+            throw new StoreException(ResponseCode.INTERNAL_SERVER_ERROR.name(),
+                    "Erro ao buscar livros: " + e.getMessage());
         }
         return books;
     }
@@ -78,17 +80,20 @@ public class BookServiceImpl implements BookService {
     @Override
     public String deleteBookById(String bookId) throws StoreException {
         String response = ResponseCode.FAILURE.name();
-        Connection con = DBUtil.getConnection();
-        try {
-            PreparedStatement ps = con.prepareStatement(deleteBookByIdQuery);
+
+        try (Connection con = DBUtil.getConnection();
+            PreparedStatement ps = con.prepareStatement(deleteBookByIdQuery)){
+
             ps.setString(1, bookId);
+
             int k = ps.executeUpdate();
             if (k == 1) {
                 response = ResponseCode.SUCCESS.name();
             }
-        } catch (Exception e) {
-            response += " : " + e.getMessage();
-            e.printStackTrace();
+
+        } catch (SQLException e) {
+            throw new StoreException(ResponseCode.INTERNAL_SERVER_ERROR.name(),
+                    "Erro ao deletar livro: " + e.getMessage());
         }
         return response;
     }
@@ -96,21 +101,24 @@ public class BookServiceImpl implements BookService {
     @Override
     public String addBook(Book book) throws StoreException {
         String responseCode = ResponseCode.FAILURE.name();
-        Connection con = DBUtil.getConnection();
-        try {
-            PreparedStatement ps = con.prepareStatement(addBookQuery);
+
+        try (Connection con = DBUtil.getConnection();
+            PreparedStatement ps = con.prepareStatement(addBookQuery)){
+
             ps.setString(1, book.getBarcode());
             ps.setString(2, book.getName());
             ps.setString(3, book.getAuthor());
             ps.setDouble(4, book.getPrice());
             ps.setInt(5, book.getQuantity());
+
             int k = ps.executeUpdate();
             if (k == 1) {
                 responseCode = ResponseCode.SUCCESS.name();
             }
-        } catch (Exception e) {
-            responseCode += " : " + e.getMessage();
-            e.printStackTrace();
+
+        } catch (SQLException e) {
+            throw new StoreException(ResponseCode.INTERNAL_SERVER_ERROR.name(),
+                    "Erro ao adicionar livro: " + e.getMessage());
         }
         return responseCode;
     }
@@ -118,37 +126,59 @@ public class BookServiceImpl implements BookService {
     @Override
     public String updateBookQtyById(String bookId, int quantity) throws StoreException {
         String responseCode = ResponseCode.FAILURE.name();
-        Connection con = DBUtil.getConnection();
-        try {
-            PreparedStatement ps = con.prepareStatement(updateBookQtyByIdQuery);
+
+        try (Connection con = DBUtil.getConnection();
+            PreparedStatement ps = con.prepareStatement(updateBookQtyByIdQuery)){
+
             ps.setInt(1, quantity);
             ps.setString(2, bookId);
             ps.executeUpdate();
             responseCode = ResponseCode.SUCCESS.name();
-        } catch (Exception e) {
-            responseCode += " : " + e.getMessage();
-            e.printStackTrace();
+
+        } catch (SQLException e) {
+            throw new StoreException(ResponseCode.INTERNAL_SERVER_ERROR.name(),
+                    "Erro ao atualizar livro por ID: " + e.getMessage());
         }
         return responseCode;
     }
 
     @Override
     public List<Book> getBooksByCommaSeperatedBookIds(String commaSeperatedBookIds) throws StoreException {
+        if (commaSeperatedBookIds == null || commaSeperatedBookIds.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<String> bookIds = Arrays.stream(commaSeperatedBookIds.split(","))
+                .map(String::trim)
+                .filter(id -> !id.isEmpty())
+                .collect(Collectors.toList());
+
+        if (bookIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        String placeholders = String.join(",", Collections.nCopies(bookIds.size(), "?"));
+        String query = "SELECT * FROM " + BooksDBConstants.TABLE_BOOK
+                + " WHERE " + BooksDBConstants.COLUMN_BARCODE + " IN ( " + placeholders + " )";
+
         List<Book> books = new ArrayList<Book>();
-        Connection con = DBUtil.getConnection();
-        try {
-            String getBooksByCommaSeperatedBookIdsQuery = "SELECT * FROM " + BooksDBConstants.TABLE_BOOK
-                    + " WHERE " +
-                    BooksDBConstants.COLUMN_BARCODE + " IN ( " + commaSeperatedBookIds + " )";
-            PreparedStatement ps = con.prepareStatement(getBooksByCommaSeperatedBookIdsQuery);
-            ResultSet rs = ps.executeQuery();
 
-            while (rs.next()) {
-                books.add(mapResultSetToBook(rs));
+        try (Connection con = DBUtil.getConnection();
+            PreparedStatement ps = con.prepareStatement(query)) {
+
+            for (int i = 0; i < bookIds.size(); i++) {
+                ps.setString(i + 1, bookIds.get(i));
             }
-            
-        } catch (SQLException e) {
 
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    books.add(mapResultSetToBook(rs));
+                }
+            }
+
+        } catch (SQLException e) {
+            throw new StoreException(ResponseCode.INTERNAL_SERVER_ERROR.name(),
+                    "Erro ao buscar livros por IDs: " + e.getMessage());
         }
         return books;
     }
@@ -156,9 +186,10 @@ public class BookServiceImpl implements BookService {
     @Override
     public String updateBook(Book book) throws StoreException {
         String responseCode = ResponseCode.FAILURE.name();
-        Connection con = DBUtil.getConnection();
-        try {
-            PreparedStatement ps = con.prepareStatement(updateBookByIdQuery);
+
+        try (Connection con = DBUtil.getConnection();
+            PreparedStatement ps = con.prepareStatement(updateBookByIdQuery)){
+
             ps.setString(1, book.getName());
             ps.setString(2, book.getAuthor());
             ps.setDouble(3, book.getPrice());
@@ -166,9 +197,10 @@ public class BookServiceImpl implements BookService {
             ps.setString(5, book.getBarcode());
             ps.executeUpdate();
             responseCode = ResponseCode.SUCCESS.name();
-        } catch (Exception e) {
-            responseCode += " : " + e.getMessage();
-            e.printStackTrace();
+
+        } catch (SQLException e) {
+            throw new StoreException(ResponseCode.INTERNAL_SERVER_ERROR.name(),
+                    "Erro ao atualizar livro: " + e.getMessage());
         }
         return responseCode;
     }
