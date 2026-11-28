@@ -28,9 +28,7 @@ public class ViewBookServlet extends HttpServlet {
 
         // Check if the customer is logged in, or else return to login page
         if (!StoreUtil.isLoggedIn(UserRole.CUSTOMER, req.getSession())) {
-            RequestDispatcher rd = req.getRequestDispatcher("CustomerLogin.html");
-            rd.include(req, res);
-            pw.println("<table class=\"tab\"><tr><td>Please Login First to Continue!!</td></tr></table>");
+            res.sendRedirect("CustomerLogin.html");
             return;
         }
         try {
