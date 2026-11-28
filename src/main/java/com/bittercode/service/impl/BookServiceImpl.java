@@ -46,15 +46,10 @@ public class BookServiceImpl implements BookService {
             ps.setString(1, bookId);
             ResultSet rs = ps.executeQuery();
 
-            while (rs.next()) {
-                String bCode = rs.getString(1);
-                String bName = rs.getString(2);
-                String bAuthor = rs.getString(3);
-                int bPrice = rs.getInt(4);
-                int bQty = rs.getInt(5);
-
-                book = new Book(bCode, bName, bAuthor, bPrice, bQty);
+            if (rs.next()) {
+                book = mapResultSetToBook(rs);
             }
+
         } catch (SQLException e) {
 
         }
@@ -71,15 +66,9 @@ public class BookServiceImpl implements BookService {
             ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
-                String bCode = rs.getString(1);
-                String bName = rs.getString(2);
-                String bAuthor = rs.getString(3);
-                int bPrice = rs.getInt(4);
-                int bQty = rs.getInt(5);
-
-                Book book = new Book(bCode, bName, bAuthor, bPrice, bQty);
-                books.add(book);
+                books.add(mapResultSetToBook(rs));
             }
+
         } catch (SQLException e) {
 
         }
@@ -155,15 +144,9 @@ public class BookServiceImpl implements BookService {
             ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
-                String bCode = rs.getString(1);
-                String bName = rs.getString(2);
-                String bAuthor = rs.getString(3);
-                int bPrice = rs.getInt(4);
-                int bQty = rs.getInt(5);
-
-                Book book = new Book(bCode, bName, bAuthor, bPrice, bQty);
-                books.add(book);
+                books.add(mapResultSetToBook(rs));
             }
+            
         } catch (SQLException e) {
 
         }
@@ -190,4 +173,13 @@ public class BookServiceImpl implements BookService {
         return responseCode;
     }
 
+    private Book mapResultSetToBook(ResultSet rs) throws SQLException {
+        return new Book(
+                rs.getString(BooksDBConstants.COLUMN_BARCODE),
+                rs.getString(BooksDBConstants.COLUMN_NAME),
+                rs.getString(BooksDBConstants.COLUMN_AUTHOR),
+                rs.getDouble(BooksDBConstants.COLUMN_PRICE),
+                rs.getInt(BooksDBConstants.COLUMN_QUANTITY)
+        );
+    }
 }
